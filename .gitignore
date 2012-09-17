@@ -2,3 +2,10 @@
 *.swp
 *.lock
 .*
+
+cmsplugin_blog.egg-info/
+venv-python-1.3/
+venv-python-12/
+venv-python-trunk/
+*.egg/
+TEST*.xml
