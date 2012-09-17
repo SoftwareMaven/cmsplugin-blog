@@ -1,6 +1,7 @@
 import datetime
 try: # pragma: no cover
     from django.views.generic.dates import BaseDateDetailView, ArchiveIndexView, _date_lookup_for_field, _date_from_string
+    from django.views.generic.dates import DayArchiveView, MonthArchiveView, YearArchiveView
     from django.views.generic.detail import SingleObjectTemplateResponseMixin
 except ImportError: # pragma: no cover
     from cbv.views.detail import SingleObjectTemplateResponseMixin
@@ -9,6 +10,7 @@ except ImportError: # pragma: no cover
 from django.http import Http404
 from django.shortcuts import redirect
 from django.utils.translation import ugettext_lazy as _
+from django.conf import settings
 
 from cms.middleware.multilingual import has_lang_prefix
 from menus.utils import set_language_changer
@@ -22,7 +24,7 @@ class Redirect(Exception):
     def __init__(self, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
-        
+
 class DateDetailView(SingleObjectTemplateResponseMixin, BaseDateDetailView):
     # Override to fix django bug
     def get_object(self, queryset=None):
@@ -54,14 +56,14 @@ class DateDetailView(SingleObjectTemplateResponseMixin, BaseDateDetailView):
         queryset = queryset.filter(**lookup)
 
         return super(BaseDateDetailView, self).get_object(queryset=queryset)
-    
+
 class EntryDateDetailView(DateDetailView):
     slug_field = get_translation_filter(Entry, slug=None).items()[0][0]
     date_field = 'pub_date'
     template_name_field = 'template'
     month_format = '%m'
     queryset = Entry.objects.all()
-    
+
     def get_object(self):
         try:
             obj = super(EntryDateDetailView, self).get_object()
@@ -82,10 +84,10 @@ class EntryDateDetailView(DateDetailView):
 
         set_language_changer(self.request, obj.language_changer)
         return obj
-        
+
     def get_unfiltered_queryset(self):
         return super(EntryDateDetailView, self).get_queryset().published()
-            
+
     def get_queryset(self):
         queryset = super(EntryDateDetailView, self).get_queryset()
         queryset = filter_queryset_language(self.request, queryset)
@@ -93,27 +95,43 @@ class EntryDateDetailView(DateDetailView):
             return queryset
         else:
             return queryset.published()
-    
+
     def dispatch(self, request, *args, **kwargs):
         try:
             return super(EntryDateDetailView, self).dispatch(request, *args, **kwargs)
         except Redirect, e:
             return redirect(*e.args, **e.kwargs)
 
-class EntryArchiveIndexView(ArchiveIndexView):
+
+class CMSBlogMixin(object):
     date_field = 'pub_date'
     allow_empty = True
-    paginate_by = 15
     template_name_field = 'template'
     queryset = Entry.objects.all()
+    if getattr(settings, "CMS_BLOG_ENABLE_PAGINATION", False):
+        paginate_by = getattr(settings, "CMS_BLOG_PAGINATE_BY", 15)
 
     def get_dated_items(self):
-        items = super(EntryArchiveIndexView, self).get_dated_items()
+        items = super(CMSBlogMixin, self).get_dated_items()
         from cmsplugin_blog.urls import language_changer
         set_language_changer(self.request, language_changer)
         return items
 
     def get_dated_queryset(self, **lookup):
-        queryset = super(EntryArchiveIndexView, self).get_dated_queryset(**lookup)
+        queryset = super(CMSBlogMixin, self).get_dated_queryset(**lookup)
         queryset = filter_queryset_language(self.request, queryset)
         return queryset.published()
+
+
+class EntryArchiveIndexView(CMSBlogMixin, ArchiveIndexView):
+    pass
+
+class EntryYearIndexView(CMSBlogMixin, YearArchiveView):
+    pass
+
+class EntryMonthIndexView(CMSBlogMixin, MonthArchiveView):
+    month_format = '%m'
+
+class EntryDayIndexView(CMSBlogMixin, DayArchiveView):
+    month_format = '%m'
+
